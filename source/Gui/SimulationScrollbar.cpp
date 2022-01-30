@@ -4,7 +4,7 @@
 
 #include <imgui.h>
 
-#include "EngineImpl/SimulationController.h"
+#include "EngineInterface/SimulationController.h"
 #include "Viewport.h"
 #include "StyleRepository.h"
 
@@ -69,7 +69,7 @@ void _SimulationScrollbar::processEvents(RealRect const& rect)
         _viewport->setCenterInWorldPos(centerInWorldPos);
     }
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-        _worldCenterForDragging = boost::none;
+        _worldCenterForDragging = std::nullopt;
     }
 }
 

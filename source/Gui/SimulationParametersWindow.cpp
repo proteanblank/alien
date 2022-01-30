@@ -2,9 +2,9 @@
 
 #include <imgui.h>
 
-#include "IconFontCppHeaders/IconsFontAwesome5.h"
+#include "Fonts/IconsFontAwesome5.h"
 
-#include "EngineImpl/SimulationController.h"
+#include "EngineInterface/SimulationController.h"
 
 #include "AlienImGui.h"
 #include "StyleRepository.h"
@@ -16,7 +16,8 @@ namespace
 }
 
 _SimulationParametersWindow::_SimulationParametersWindow(SimulationController const& simController)
-    : _simController(simController)
+    : _AlienWindow("Simulation parameters", "windows.simulation parameters", false)
+    , _simController(simController)
 {
     for (int n = 0; n < IM_ARRAYSIZE(_savedPalette); n++) {
         ImVec4 color;
@@ -24,20 +25,10 @@ _SimulationParametersWindow::_SimulationParametersWindow(SimulationController co
         color.w = 1.0f; //alpha
         _savedPalette[n] = static_cast<ImU32>(ImColor(color));
     }
-    _on = GlobalSettings::getInstance().getBoolState("windows.simulation parameters.active", false);
 }
 
-_SimulationParametersWindow::~_SimulationParametersWindow()
+void _SimulationParametersWindow::processIntern()
 {
-    GlobalSettings::getInstance().setBoolState("windows.simulation parameters.active", _on);
-}
-
-void _SimulationParametersWindow::process()
-{
-    if (!_on) {
-        return;
-    }
-    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_None;
     auto simParameters = _simController->getSimulationParameters();
     auto origSimParameters = _simController->getOriginalSimulationParameters();
     auto lastSimParameters = simParameters;
@@ -46,50 +37,45 @@ void _SimulationParametersWindow::process()
     auto origSimParametersSpots = _simController->getOriginalSimulationParametersSpots();
     auto lastSimParametersSpots = simParametersSpots;
 
-    ImGui::SetNextWindowBgAlpha(Const::WindowAlpha * ImGui::GetStyle().Alpha);
-    if (ImGui::Begin("Simulation parameters", &_on, windowFlags)) {
+    if (ImGui::BeginTabBar("##Flow", ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_FittingPolicyResizeDown)) {
 
-        if (ImGui::BeginTabBar(
-                "##Flow", ImGuiTabBarFlags_AutoSelectNewTabs | ImGuiTabBarFlags_FittingPolicyResizeDown)) {
-
-            if (simParametersSpots.numSpots < 2) {
-                if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) {
-                    int index = simParametersSpots.numSpots;
-                    simParametersSpots.spots[index] = createSpot(simParameters, index);
-                    _simController->setOriginalSimulationParametersSpot(simParametersSpots.spots[index], index);
-                    ++simParametersSpots.numSpots;
-                }
+        if (simParametersSpots.numSpots < 2) {
+            if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) {
+                int index = simParametersSpots.numSpots;
+                simParametersSpots.spots[index] = createSpot(simParameters, index);
+                _simController->setOriginalSimulationParametersSpot(simParametersSpots.spots[index], index);
+                ++simParametersSpots.numSpots;
             }
+            AlienImGui::Tooltip("Add spot");
+        }
 
-            if (ImGui::BeginTabItem("Base", NULL, ImGuiTabItemFlags_None)) {
-                processBase(simParameters, origSimParameters);
+        if (ImGui::BeginTabItem("Base", NULL, ImGuiTabItemFlags_None)) {
+            processBase(simParameters, origSimParameters);
+            ImGui::EndTabItem();
+        }
+
+        for (int tab = 0; tab < simParametersSpots.numSpots; ++tab) {
+            SimulationParametersSpot& spot = simParametersSpots.spots[tab];
+            SimulationParametersSpot const& origSpot = origSimParametersSpots.spots[tab];
+            bool open = true;
+            char name[16];
+            snprintf(name, IM_ARRAYSIZE(name), "Spot %01d", tab + 1);
+            if (ImGui::BeginTabItem(name, &open, ImGuiTabItemFlags_None)) {
+                processSpot(spot, origSpot);
                 ImGui::EndTabItem();
             }
 
-            for (int tab = 0; tab < simParametersSpots.numSpots; ++tab) {
-                SimulationParametersSpot& spot = simParametersSpots.spots[tab];
-                SimulationParametersSpot const& origSpot = origSimParametersSpots.spots[tab];
-                bool open = true;
-                char name[16];
-                snprintf(name, IM_ARRAYSIZE(name), "Spot %01d", tab + 1);
-                if (ImGui::BeginTabItem(name, &open, ImGuiTabItemFlags_None)) {
-                    processSpot(spot, origSpot);
-                    ImGui::EndTabItem();
+            if (!open) {
+                for (int i = tab; i < simParametersSpots.numSpots - 1; ++i) {
+                    simParametersSpots.spots[i] = simParametersSpots.spots[i + 1];
+                    _simController->setOriginalSimulationParametersSpot(simParametersSpots.spots[i], i);
                 }
-
-                if (!open) {
-                    for (int i = tab; i < simParametersSpots.numSpots - 1; ++i) {
-                        simParametersSpots.spots[i] = simParametersSpots.spots[i + 1];
-                        _simController->setOriginalSimulationParametersSpot(simParametersSpots.spots[i], i);
-                    }
-                    --simParametersSpots.numSpots;
-                }
+                --simParametersSpots.numSpots;
             }
-
-            ImGui::EndTabBar();
         }
+
+        ImGui::EndTabBar();
     }
-    ImGui::End();
 
     if (simParameters != lastSimParameters) {
         _simController->setSimulationParameters_async(simParameters);
@@ -98,16 +84,6 @@ void _SimulationParametersWindow::process()
     if (simParametersSpots != lastSimParametersSpots) {
         _simController->setSimulationParametersSpots_async(simParametersSpots);
     }
-}
-
-bool _SimulationParametersWindow::isOn() const
-{
-    return _on;
-}
-
-void _SimulationParametersWindow::setOn(bool value)
-{
-    _on = value;
 }
 
 SimulationParametersSpot _SimulationParametersWindow::createSpot(SimulationParameters const& simParameters, int index)
@@ -130,13 +106,12 @@ void _SimulationParametersWindow::processBase(
     SimulationParameters& simParameters,
     SimulationParameters const& origSimParameters)
 {
-    auto maxContentTextWidthScaled = StyleRepository::getInstance().scaleContent(MaxContentTextWidth);
     if (ImGui::BeginChild("##", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar)) {
         AlienImGui::Group("Numerics");
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Time step size")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1.0f)
                 .defaultValue(origSimParameters.timestepSize)
@@ -148,7 +123,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Friction")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1.0f)
                 .logarithmic(true)
@@ -159,7 +134,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Radiation strength")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(0.01f)
                 .logarithmic(true)
@@ -170,7 +145,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Maximum velocity")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(6.0f)
                 .defaultValue(origSimParameters.cellMaxVel)
@@ -179,7 +154,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Maximum force")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(3.0f)
                 .defaultValue(origSimParameters.spotValues.cellMaxForce)
@@ -188,7 +163,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Minimum energy")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(10.0f)
                 .max(200.0f)
                 .defaultValue(origSimParameters.spotValues.cellMinEnergy)
@@ -197,7 +172,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Minimum distance")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1.0f)
                 .defaultValue(origSimParameters.cellMinDistance)
@@ -208,7 +183,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Repulsion strength")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(0.3f)
                 .defaultValue(origSimParameters.cellRepulsionStrength)
@@ -217,7 +192,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Maximum collision distance")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(3.0f)
                 .defaultValue(origSimParameters.cellMaxCollisionDistance)
@@ -226,7 +201,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Maximum binding distance")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(5.0f)
                 .defaultValue(origSimParameters.cellMaxBindingDistance)
@@ -235,7 +210,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Binding force strength")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(4.0f)
                 .defaultValue(origSimParameters.spotValues.cellBindingForce)
@@ -246,7 +221,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Binding creation force")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1.0f)
                 .defaultValue(origSimParameters.spotValues.cellFusionVelocity)
@@ -256,7 +231,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Binding max energy")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(50.0f)
                 .max(1000000.0f)
                 .logarithmic(true)
@@ -270,7 +245,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderInt(
             AlienImGui::SliderIntParameters()
                 .name("Maximum cell bonds")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .defaultValue(origSimParameters.cellMaxBonds)
                 .min(0)
                 .max(6)
@@ -281,9 +256,10 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Mutation rate")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
-                .max(0.005f)
+                .max(0.1f)
+                .logarithmic(true)
                 .format("%.5f")
                 .defaultValue(origSimParameters.spotValues.tokenMutationRate)
                 .tooltip(std::string("Probability that a byte in the token memory is changed per time step.")),
@@ -291,7 +267,7 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Weapon energy cost")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(4.0f)
                 .defaultValue(origSimParameters.spotValues.cellFunctionWeaponEnergyCost)
@@ -301,18 +277,18 @@ void _SimulationParametersWindow::processBase(
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Weapon color penalty")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1.0f)
                 .defaultValue(origSimParameters.spotValues.cellFunctionWeaponColorPenalty)
                 .tooltip(std::string(
                     "The larger this value is, the less energy a cell can gain from an attack if the attacked cell "
-                    "does not match the adjacent color.")),
+                    "does not match the successive color.")),
             simParameters.spotValues.cellFunctionWeaponColorPenalty);
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Weapon geometry penalty")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(5.0f)
                 .defaultValue(origSimParameters.spotValues.cellFunctionWeaponGeometryDeviationExponent)
@@ -331,14 +307,15 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
 
         AlienImGui::Group("Location and meta data");
 
-        auto maxContentTextWidthScaled = StyleRepository::getInstance().scaleContent(MaxContentTextWidth);
         auto& color = spot.color;
         AlienImGui::ColorButtonWithPicker(
             "##",
             color,
             _backupColor,
             _savedPalette,
-            RealVector2D(ImGui::GetContentRegionAvail().x - maxContentTextWidthScaled, 0));
+            RealVector2D(
+                ImGui::GetContentRegionAvail().x - StyleRepository::getInstance().scaleContent(MaxContentTextWidth),
+                0));
 
         ImGui::SameLine();
         ImGui::Text("Background color");
@@ -347,7 +324,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Position X")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(toFloat(worldSize.x))
                 .defaultValue(origSpot.posX)
@@ -356,7 +333,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Position Y")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(toFloat(worldSize.y))
                 .defaultValue(origSpot.posY)
@@ -365,7 +342,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Core radius")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(maxRadius)
                 .defaultValue(origSpot.coreRadius)
@@ -374,7 +351,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Fade-out radius")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(maxRadius)
                 .defaultValue(origSpot.fadeoutRadius)
@@ -385,7 +362,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Friction")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1)
                 .logarithmic(true)
@@ -395,7 +372,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Radiation strength")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(0.01f)
                 .logarithmic(true)
@@ -405,7 +382,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Maximum force")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(3.0f)
                 .defaultValue(origSpot.values.cellMaxForce),
@@ -413,7 +390,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Minimum energy")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(100.0f)
                 .defaultValue(origSpot.values.cellMinEnergy),
@@ -423,7 +400,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Binding force strength")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(4.0f)
                 .defaultValue(origSpot.values.cellBindingForce),
@@ -431,7 +408,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Binding creation force")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1.0f)
                 .defaultValue(origSpot.values.cellFusionVelocity),
@@ -439,7 +416,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Binding max energy")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(50.0f)
                 .max(1000000.0f)
                 .logarithmic(true)
@@ -454,16 +431,17 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Mutation rate")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
-                .max(0.005f)
+                .max(0.1f)
+                .logarithmic(true)
                 .format("%.5f")
                 .defaultValue(origSpot.values.tokenMutationRate),
             spot.values.tokenMutationRate);
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Weapon energy cost")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(4.0f)
                 .defaultValue(origSpot.values.cellFunctionWeaponEnergyCost),
@@ -471,7 +449,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Weapon color penalty")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(1.0f)
                 .defaultValue(origSpot.values.cellFunctionWeaponColorPenalty),
@@ -479,7 +457,7 @@ void _SimulationParametersWindow::processSpot(SimulationParametersSpot& spot, Si
         AlienImGui::SliderFloat(
             AlienImGui::SliderFloatParameters()
                 .name("Weapon geometry penalty")
-                .textWidth(maxContentTextWidthScaled)
+                .textWidth(MaxContentTextWidth)
                 .min(0)
                 .max(5.0f)
                 .defaultValue(origSpot.values.cellFunctionWeaponGeometryDeviationExponent),

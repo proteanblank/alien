@@ -1,22 +1,19 @@
 #pragma once
 
+#include "EngineInterface/Definitions.h"
 #include "EngineInterface/SimulationParameters.h"
 #include "EngineInterface/SimulationParametersSpots.h"
-#include "EngineImpl/Definitions.h"
 #include "Definitions.h"
+#include "AlienWindow.h"
 
-class _SimulationParametersWindow
+class _SimulationParametersWindow : public _AlienWindow
 {
 public:
     _SimulationParametersWindow(SimulationController const& simController);
-    ~_SimulationParametersWindow();
-
-    void process();
-
-    bool isOn() const;
-    void setOn(bool value);
 
 private:
+    void processIntern();
+
     SimulationParametersSpot createSpot(SimulationParameters const& simParameters, int index);
 
     void processBase(SimulationParameters& simParameters, SimulationParameters const& origSimParameters);
@@ -24,7 +21,6 @@ private:
 
     SimulationController _simController;
 
-    bool _on = false;
     uint32_t _savedPalette[32] = {};
     uint32_t _backupColor;
 };

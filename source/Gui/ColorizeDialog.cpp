@@ -4,10 +4,9 @@
 
 #include "Base/Definitions.h"
 #include "EngineInterface/Colors.h"
-#include "EngineInterface/ChangeDescriptions.h"
 #include "EngineInterface/Descriptions.h"
 #include "EngineInterface/DescriptionHelper.h"
-#include "EngineImpl/SimulationController.h"
+#include "EngineInterface/SimulationController.h"
 
 #include "AlienImGui.h"
 
@@ -52,7 +51,7 @@ void _ColorizeDialog::process()
             anySelected |= checkColor;
         }
         ImGui::BeginDisabled(!anySelected);
-        if (ImGui::Button("OK")) {
+        if (AlienImGui::Button("OK")) {
             onColorize();
             ImGui::CloseCurrentPopup();
             _show = false;
@@ -61,7 +60,7 @@ void _ColorizeDialog::process()
 
         ImGui::SameLine();
         ImGui::SetItemDefaultFocus();
-        if (ImGui::Button("Cancel")) {
+        if (AlienImGui::Button("Cancel")) {
             ImGui::CloseCurrentPopup();
             _show = false;
         }
@@ -92,7 +91,7 @@ void _ColorizeDialog::onColorize()
     auto timestep = static_cast<uint32_t>(_simController->getCurrentTimestep());
     auto settings = _simController->getSettings();
     auto symbolMap = _simController->getSymbolMap();
-    auto content = _simController->getSimulationData({0, 0}, _simController->getWorldSize());
+    auto content = _simController->getClusteredSimulationData({0, 0}, _simController->getWorldSize());
 
     std::vector<int> colorCodes;
     for (int i = 0; i < 7; ++i) {
@@ -104,5 +103,5 @@ void _ColorizeDialog::onColorize()
 
     _simController->closeSimulation();
     _simController->newSimulation(timestep, settings, symbolMap);
-    _simController->setSimulationData(content);
+    _simController->setClusteredSimulationData(content);
 }

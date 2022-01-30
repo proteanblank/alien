@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Base/Definitions.h"
+#include "EngineInterface/Definitions.h"
 #include "EngineInterface/OverlayDescriptions.h"
-#include "EngineImpl/Definitions.h"
 #include "Definitions.h"
 
 class _SimulationView
@@ -10,12 +10,17 @@ class _SimulationView
 public:
     _SimulationView(
         SimulationController const& simController,
-        ModeWindow const& modeWindow,
+        ModeController const& modeWindow,
         Viewport const& viewport);
+    ~_SimulationView();
+
     void resize(IntVector2D const& viewportSize);
 
     void processContent();
     void processControls();
+
+    bool isOverlayActive() const;
+    void setOverlayActive(bool active);
 
 private:
     void processEvents();
@@ -39,7 +44,8 @@ private:
     SimulationScrollbar _scrollbarY;
 
     //overlay
-    boost::optional<OverlayDescription> _overlay;
+    bool _isOverlayActive = true;
+    std::optional<OverlayDescription> _overlay;
     
     //shader data
     unsigned int _vao, _vbo, _ebo;
@@ -51,10 +57,10 @@ private:
     unsigned int _textureFramebufferId = 0;
 
     //navigation
-    boost::optional<RealVector2D> _worldPosForMovement;
-    boost::optional<IntVector2D> _prevMousePosInt;
+    std::optional<RealVector2D> _worldPosForMovement;
+    std::optional<IntVector2D> _prevMousePosInt;
 
     Viewport _viewport;
-    ModeWindow _modeWindow;
+    ModeController _modeWindow;
     SimulationController _simController;
 };

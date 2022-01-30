@@ -2,12 +2,11 @@
 
 #include <imgui.h>
 
-#include "IconFontCppHeaders/IconsFontAwesome5.h"
+#include "Fonts/IconsFontAwesome5.h"
 
-#include "Base/StringFormatter.h"
-#include "EngineInterface/ChangeDescriptions.h"
+#include "Base/StringHelper.h"
 #include "EngineInterface/DescriptionHelper.h"
-#include "EngineImpl/SimulationController.h"
+#include "EngineInterface/SimulationController.h"
 #include "StyleRepository.h"
 #include "Viewport.h"
 #include "Resources.h"
@@ -15,26 +14,14 @@
 #include "AlienImGui.h"
 
 _SpatialControlWindow::_SpatialControlWindow(SimulationController const& simController, Viewport const& viewport)
-    : _simController(simController)
+    : _AlienWindow("Spatial control", "windows.spatial control", true)
+    , _simController(simController)
     , _viewport(viewport)
 {
-    _on = GlobalSettings::getInstance().getBoolState("windows.spatial control.active", true);
 }
 
-_SpatialControlWindow::~_SpatialControlWindow()
+void _SpatialControlWindow::processIntern()
 {
-    GlobalSettings::getInstance().setBoolState("windows.spatial control.active", _on);
-}
-
-void _SpatialControlWindow::process()
-{
-    if (!_on) {
-        return;
-    }
-
-    ImGui::SetNextWindowBgAlpha(Const::WindowAlpha * ImGui::GetStyle().Alpha);
-    ImGui::Begin("Spatial control", &_on);
-
     processZoomInButton();
     ImGui::SameLine();
     processZoomOutButton();
@@ -50,27 +37,27 @@ void _SpatialControlWindow::process()
     if (ImGui::BeginChild("##", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar)) {
 
         ImGui::Text("World size");
-        ImGui::PushFont(StyleRepository::getInstance().getHugeFont());
+        ImGui::PushFont(StyleRepository::getInstance().getLargeFont());
         ImGui::PushStyleColor(ImGuiCol_Text, Const::TextDecentColor);
         auto worldSize = _simController->getWorldSize();
         ImGui::TextUnformatted(
-            (StringFormatter::format(worldSize.x) + " x " + StringFormatter::format(worldSize.y)).c_str());
+            (StringHelper::format(worldSize.x) + " x " + StringHelper::format(worldSize.y)).c_str());
         ImGui::PopStyleColor();
         ImGui::PopFont();
 
         ImGui::Text("Zoom factor");
-        ImGui::PushFont(StyleRepository::getInstance().getHugeFont());
+        ImGui::PushFont(StyleRepository::getInstance().getLargeFont());
         ImGui::PushStyleColor(ImGuiCol_Text, Const::TextDecentColor);
-        ImGui::TextUnformatted(StringFormatter::format(_viewport->getZoomFactor(), 1).c_str());
+        ImGui::TextUnformatted(StringHelper::format(_viewport->getZoomFactor(), 1).c_str());
         ImGui::PopStyleColor();
         ImGui::PopFont();
 
         ImGui::Text("Center position");
-        ImGui::PushFont(StyleRepository::getInstance().getHugeFont());
+        ImGui::PushFont(StyleRepository::getInstance().getLargeFont());
         ImGui::PushStyleColor(ImGuiCol_Text, Const::TextDecentColor);
         auto centerPos = _viewport->getCenterInWorldPos();
         ImGui::TextUnformatted(
-            (StringFormatter::format(centerPos.x, 1) + ", " + StringFormatter::format(centerPos.y, 1)).c_str());
+            (StringHelper::format(centerPos.x, 1) + ", " + StringHelper::format(centerPos.y, 1)).c_str());
         ImGui::PopStyleColor();
         ImGui::PopFont();
 
@@ -78,46 +65,31 @@ void _SpatialControlWindow::process()
     }
     ImGui::EndChild();
 
-    ImGui::End();
-
     processResizeDialog();
-}
-
-bool _SpatialControlWindow::isOn() const
-{
-    return _on;
-}
-
-void _SpatialControlWindow::setOn(bool value)
-{
-    _on = value;
 }
 
 void _SpatialControlWindow::processZoomInButton()
 {
-    if (AlienImGui::BeginToolbarButton(ICON_FA_SEARCH_PLUS)) {
+    if (AlienImGui::ToolbarButton(ICON_FA_SEARCH_PLUS)) {
         _viewport->setZoomFactor(_viewport->getZoomFactor() * 2);
     }
-    AlienImGui::EndToolbarButton();
 }
 
 void _SpatialControlWindow::processZoomOutButton()
 {
-    if (AlienImGui::BeginToolbarButton(ICON_FA_SEARCH_MINUS)) {
+    if (AlienImGui::ToolbarButton(ICON_FA_SEARCH_MINUS)) {
         _viewport->setZoomFactor(_viewport->getZoomFactor() / 2);
     }
-    AlienImGui::EndToolbarButton();
 }
 
 void _SpatialControlWindow::processResizeButton()
 {
-    if (AlienImGui::BeginToolbarButton(ICON_FA_EXPAND_ARROWS_ALT)) {
+    if (AlienImGui::ToolbarButton(ICON_FA_EXPAND_ARROWS_ALT)) {
         _showResizeDialog = true;
         auto worldSize = _simController->getWorldSize();
         _width = worldSize.x;
         _height = worldSize.y;
     }
-    AlienImGui::EndToolbarButton();
 }
 
 void _SpatialControlWindow::processZoomSensitivitySlider()
@@ -165,11 +137,11 @@ void _SpatialControlWindow::processResizeDialog()
 
                 ImGui::EndTable();
             }
-            ImGui::Checkbox("Scale content", &_scaleContent);
+            AlienImGui::ToggleButton("Scale content", _scaleContent);
 
             AlienImGui::Separator();
 
-            if (ImGui::Button("OK")) {
+            if (AlienImGui::Button("OK")) {
                 ImGui::CloseCurrentPopup();
                 _showResizeDialog = false;
                 onResizing();
@@ -177,7 +149,7 @@ void _SpatialControlWindow::processResizeDialog()
             ImGui::SetItemDefaultFocus();
 
             ImGui::SameLine();
-            if (ImGui::Button("Cancel")) {
+            if (AlienImGui::Button("Cancel")) {
                 ImGui::CloseCurrentPopup();
                 _showResizeDialog = false;
             }
@@ -194,7 +166,7 @@ void _SpatialControlWindow::onResizing()
     auto timestep = static_cast<uint32_t>(_simController->getCurrentTimestep());
     auto settings = _simController->getSettings();
     auto symbolMap = _simController->getSymbolMap();
-    auto content = _simController->getSimulationData({0, 0}, _simController->getWorldSize());
+    auto content = _simController->getClusteredSimulationData({0, 0}, _simController->getWorldSize());
 
     _simController->closeSimulation();
 
@@ -208,5 +180,5 @@ void _SpatialControlWindow::onResizing()
     if (_scaleContent) {
         DescriptionHelper::duplicate(content, origWorldSize, {_width, _height});
     }
-    _simController->setSimulationData(content);
+    _simController->setClusteredSimulationData(content);
 }

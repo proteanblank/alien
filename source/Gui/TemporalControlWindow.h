@@ -1,22 +1,19 @@
 #pragma once
 
+#include "EngineInterface/Definitions.h"
 #include "EngineInterface/Descriptions.h"
-#include "EngineImpl/Definitions.h"
 
 #include "Definitions.h"
+#include "AlienWindow.h"
 
-class _TemporalControlWindow
+class _TemporalControlWindow : public _AlienWindow
 {
 public:
     _TemporalControlWindow(SimulationController const& simController, StatisticsWindow const& statisticsWindow);
-    ~_TemporalControlWindow();
-
-    void process();
-
-    bool isOn() const;
-    void setOn(bool value);
 
 private:
+    void processIntern();
+
     void processTpsInfo();
     void processTotalTimestepsInfo();
     void processTpsRestriction();
@@ -36,10 +33,9 @@ private:
         uint64_t timestep;
         DataDescription data;
     };
-    boost::optional<Snapshot> _snapshot;
+    std::optional<Snapshot> _snapshot;
 
     std::vector<Snapshot> _history;
-    bool _on = false;
 
     bool _slowDown = false;
     int _tpsRestriction = 30;
